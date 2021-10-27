@@ -1,6 +1,6 @@
 # Quantum machine learning beyond kernel methods
 
-This git repository accompanies the pre-print "Quantum machine learning beyond kernel methods" [arXiv:2110.](https://arxiv.org/abs/2110.) by providing the code used to run its numerical simulations, along with their resulting data.
+This git repository accompanies the pre-print "Quantum machine learning beyond kernel methods" [arXiv:2110.13162](https://arxiv.org/abs/2110.13162) by providing the code used to run its numerical simulations, along with their resulting data.
 
 # Runfiles
 

@@ -77,7 +77,7 @@ def generate_circuit(qubits, n_layers, heisenberg=False):
 
 class ExplicitPQC(tf.keras.layers.Layer):
 	"""The Keras layer used by the explicit model to store its circuit, parameters, and evaluate itself."""
-	def __init__(self, qubits, n_layers, observables, heisenberg, name="explicit_PQC"):
+	def __init__(self, qubits, n_layers, observables, train, heisenberg, name="explicit_PQC"):
 		super(ExplicitPQC, self).__init__(name=name)
 		self.n_layers = n_layers
 		self.n_qubits = len(qubits)
@@ -85,7 +85,10 @@ class ExplicitPQC(tf.keras.layers.Layer):
 
 		circuit, theta_symbols, input_symbols, inputs_prod = generate_circuit(qubits, n_layers, heisenberg)
 
-		theta_init = tf.random_uniform_initializer(minval=0.0, maxval=np.pi)
+		if train:
+			theta_init = tf.random_normal_initializer(mean=0.0, stddev=0.05)
+		else:
+			theta_init = tf.random_uniform_initializer(minval=0.0, maxval=np.pi)
 		self.theta = tf.Variable(
 			initial_value=theta_init(shape=(1, len(theta_symbols)), dtype="float32"),
 			trainable=True, name="thetas"
@@ -177,13 +180,14 @@ class Explicit:
 		self.optimizer_out = tf.keras.optimizers.Adam(learning_rate=0.1, amsgrad=True)
 		self.loss_history = []
 		self.val_history = []
+		self.test_history = []
 
 		return
 
 	def generate_model_explicit(self, train=False, heisenberg=False):
 		"""Generates the explicit model."""
 		input_tensor = tf.keras.Input(shape=(len(self.qubits),), dtype=tf.dtypes.float32, name='input')
-		explicit_pqc = ExplicitPQC(self.qubits, self.n_layers, self.observables, heisenberg)([input_tensor])
+		explicit_pqc = ExplicitPQC(self.qubits, self.n_layers, self.observables, train, heisenberg)([input_tensor])
 		if train:
 			explicit_pqc = Rescaling(1)(explicit_pqc)
 		model = tf.keras.Model(inputs=[input_tensor], outputs=explicit_pqc)
@@ -202,35 +206,35 @@ class Explicit:
 		x_train, x_test = (x_train - x_mean) / x_std, (x_test - x_mean) / x_std
 
 		# Prune dataset
-		x_train, x_test = x_train[:nb_train], x_test[:nb_test]
+		x_train, x_test, x_test2 = x_train[:nb_train], x_test[:nb_test], x_test[nb_test:2*nb_test]
 
 		# _save data for classical methods and compute the feature vectors of Havlivcek's encoding
-		x_train_save, x_test_save = x_train.numpy(), x_test.numpy()
-		x_train, x_test = tf.convert_to_tensor(preprocess(x_train.numpy())), tf.convert_to_tensor(preprocess(x_test.numpy()))
+		x_train_save, x_test_save, x_test2_save = x_train.numpy(), x_test.numpy(), x_test2.numpy()
+		x_train, x_test, x_test2 = tf.convert_to_tensor(preprocess(x_train.numpy())), tf.convert_to_tensor(preprocess(x_test.numpy())), tf.convert_to_tensor(preprocess(x_test2.numpy()))
 
 		# Compute new labels and normalize
-		y_train, y_test = self.model(x_train), self.model(x_test)
+		y_train, y_test, y_test2 = self.model(x_train), self.model(x_test), self.model(x_test2)
 		if norm:
 			std = np.std(y_train)
 			self.std = std
-			y_train, y_test = y_train/std, y_test/std
+			y_train, y_test, y_test2 = y_train/std, y_test/std, y_test2/std
 
-		self.x_train, self.y_train, self.x_test, self.y_test, self.x_train_save, self.x_test_save = x_train, y_train, x_test, y_test, x_train_save, x_test_save
+		self.x_train, self.y_train, self.x_test, self.y_test, self.x_test2, self.y_test2, self.x_train_save, self.x_test_save, self.x_test2_save  = x_train, y_train, x_test, y_test, x_test2, y_test2, x_train_save, x_test_save, x_test2_save
 
-		return x_train, y_train, x_test, y_test, x_train_save, x_test_save
+		return x_train, y_train, x_test, y_test, x_test2, y_test2, x_train_save, x_test_save, x_test2_save
 
 	def relabel(self, norm):
 		"""Relabel data when this is not the first explicit model at a given system size that is generating the data."""
-		x_train, x_test = self.x_train, self.x_test
+		x_train, x_test, x_test2 = self.x_train, self.x_test, self.x_test2
 
-		y_train, y_test = self.model(x_train), self.model(x_test)
+		y_train, y_test, y_test2 = self.model(x_train), self.model(x_test), self.model(x_test2)
 		if norm:
 			std = np.std(y_train)
 			self.std = std
-			y_train, y_test = y_train/std, y_test/std
-		self.y_train, self.y_test = y_train, y_test
+			y_train, y_test, y_test2 = y_train/std, y_test/std, y_test2/std
+		self.y_train, self.y_test, self.y_test2 = y_train, y_test, y_test2
 
-		return y_train, y_test
+		return y_train, y_test, y_test2
 
 	def learning_step(self, X_train, y_train, X_test, y_test, batchsize=None):
 		"""One gradient descent step on the training loss."""
@@ -369,7 +373,7 @@ if __name__ == '__main__':
 	# First execution at this system size?
 	if str(sys_args[4]) == '0':
 		# Generate pre-processed fashion MNIST dataset
-		x_train, y_train, x_test, y_test, x_train_save, _ = gen.generate_fMNIST(nb_train, nb_test, norm)
+		x_train, y_train, x_test, y_test, x_test2, y_test2, x_train_save, _ , _ = gen.generate_fMNIST(nb_train, nb_test, norm)
 
 		# Compute kernel
 		impl = Implicit(qubits)
@@ -391,7 +395,7 @@ if __name__ == '__main__':
 
 	else:
 		# Load already generated kernel matrix and stuff
-		pickle_path = './results/n'+str(sys_args[1])+'_L'+str(sys_args[2])+'_T'+str(sys_args[3])+'_0'+'_fashion'+(str(sys_args[5])=='True')*'_heisen'+'.pckl'
+		pickle_path = './results/n'+str(sys_args[1])+'_L'+str(sys_args[2])+'_T'+str(sys_args[3])+'_0'+'_fashion'+(str(sys_args[5])=='True')*'_heisen'+'gauss.pckl'
 		l = pickle.load(open(pickle_path, 'rb'))
 		impl = l[2]
 		kernel = np.copy(impl.kernel)
@@ -399,9 +403,9 @@ if __name__ == '__main__':
 		d = impl.d
 		g = impl.g
 		gen_old = l[0]
-		gen.x_train, gen.x_test, gen.x_train_save, gen.x_test_save = gen_old.x_train, gen_old.x_test, gen_old.x_train_save, gen_old.x_test_save
-		x_train, x_test = gen.x_train, gen.x_test
-		y_train, y_test = gen.relabel()
+		gen.x_train, gen.x_test, gen.x_test2, gen.x_train_save, gen.x_test_save, gen.x_test2_save = gen_old.x_train, gen_old.x_test, gen_old.x_test2, gen_old.x_train_save, gen_old.x_test_save, gen_old.x_test2_save
+		x_train, x_test, x_test2 = gen.x_train, gen.x_test, gen.x_test2
+		y_train, y_test, y_test2 = gen.relabel(norm)
 
 	# "Train" implicit model
 	# First unregularized
@@ -409,9 +413,11 @@ if __name__ == '__main__':
 	regr.fit(kernel, np.array(y_train).flatten())
 	err_0 = mse(y_train, regr.predict(kernel)).numpy()
 	val_0 = mse(y_test, regr.predict(impl.kernel_matrix(x_test, x_train))).numpy()
-	print('Unregularized training loss, validation loss', err_0, val_0)
+	test_0 = mse(y_test2, regr.predict(impl.kernel_matrix(x_test2, x_train))).numpy()
+	print('Unregularized training loss, validation loss, test loss', err_0, val_0, test_0)
 	errs = [err_0]
 	vals = [val_0]
+	tests = [test_0]
 	# Now regularized
 	Cs = [0.006, 0.015, 0.03, 0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0, 256, 512, 1024]
 	alphas = 1/(2*np.array(Cs[::-1]))
@@ -420,16 +426,23 @@ if __name__ == '__main__':
 		regr.fit(kernel, np.array(y_train).flatten())
 		errs += [mse(y_train, regr.predict(kernel)).numpy()]
 		vals += [mse(y_test, regr.predict(impl.kernel_matrix(x_test, x_train))).numpy()]
+		tests += [mse(y_test2, regr.predict(impl.kernel_matrix(x_test2, x_train))).numpy()]
 	idx = np.argmin(vals)
 	val_impl = vals[idx]
+	test_impl = tests[idx]
 	err_impl = errs[idx]
-	print('Best training loss, validation loss', err_impl, val_impl)
+	print('Best training loss, validation loss, test loss', err_impl, val_impl, test_impl)
 
 	# Train explicit model
 	nb_steps = 500
 	for i in range(nb_steps):
 		print(i, '/' + str(nb_steps))
-		print('Training, validation: ', trn.learning_step(x_train, y_train, x_test, y_test))
+		l, val = trn.learning_step(x_train, y_train, x_test, y_test)
+        test = tf.keras.losses.MeanSquaredError()(trn.model(x_test2), y_test2).numpy()
+        trn.test_history += [test]
+		print('Training, validation, test: ', l, val, test)
+		if val.numpy()<10**(-5):
+            break
 
 	# For storage
 	trn.variables = trn.model.variables
@@ -437,5 +450,5 @@ if __name__ == '__main__':
 	trn.model = None
 
 	# Store in pickle file
-	pickle_path = './results/n'+str(sys_args[1])+'_L'+str(sys_args[2])+'_T'+str(sys_args[3])+'_'+str(sys_args[4])+'_fashion'+(str(sys_args[5])=='True')*'_heisen'+'.pckl'
-	pickle.dump([gen, trn, impl, d, g, err_0, val_0, errs, vals], open(pickle_path, 'wb'))
+	pickle_path = './results/n'+str(sys_args[1])+'_L'+str(sys_args[2])+'_T'+str(sys_args[3])+'_'+str(sys_args[4])+'_fashion'+(str(sys_args[5])=='True')*'_heisen'+'gauss.pckl'
+	pickle.dump([gen, trn, impl, d, g, err_0, val_0, test_0, errs, vals, tests], open(pickle_path, 'wb'))

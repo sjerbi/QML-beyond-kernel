@@ -12,7 +12,7 @@ Takes as arguments: system size, number of layers in the variational circuit, nu
 
 Stores a pickle file in ```./results/``` containing: the generating explicit model storing its dataset, the trained explicit model storing its learning history, the implicit model (storing the kernel matrix, for experiment number 0), and the training and validation errors of the implicit model for regularized and unregularized losses. 
 
-To reproduce the results of Figure 5: run command lines of the form <br/> `python main.py {2->12} {15-10-7-6-5-4-4-3-3-3-3} 1000 {0->9} False` <br/>
+To reproduce the results of Figure 6: run command lines of the form <br/> `python main.py {2->12} {15-10-7-6-5-4-4-3-3-3-3} 1000 {0->9} False` <br/>
 e.g., `python main.py 10 3 1000 0 False`
 <br/>
 <br/>
@@ -23,7 +23,7 @@ Python script to run a list of classical learning algorithms on the generated le
 
 Adds the best classical learning performance to the pickle files above.
 
-To reproduce the results of Figure 5: run command lines of the form <br/> `python classical.py {2->12} {15-10-7-6-5-4-4-3-3-3-3} 1000 {0->9} False` <br/>
+To reproduce the results of Figure 6: run command lines of the form <br/> `python classical.py {2->12} {15-10-7-6-5-4-4-3-3-3-3} 1000 {0->9} False` <br/>
 e.g., `python classical.py 10 3 1000 0 False`
 <br/>
 <br/>
@@ -34,5 +34,5 @@ Python script to train a different explicit model on an already generated learni
 
 Adds the newly trained explicit model (storing its learning history) to the pickle files above.
 
-To reproduce the results of Figure 12: run command lines of the form <br/> `python new_run.py {2->12} {15-10-7-6-5-4-4-3-3-3-3} 1000 {0->9} False True` <br/>
+To reproduce the results of Figure 13: run command lines of the form <br/> `python new_run.py {2->12} {15-10-7-6-5-4-4-3-3-3-3} 1000 {0->9} False True` <br/>
 e.g., `python new_run.py 10 3 1000 0 False True`
